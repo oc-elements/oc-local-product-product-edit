@@ -1,10 +1,15 @@
 <link rel="import" href="../polymer/polymer.html">
 
+<link rel="import" href="../oc-product-api/oc-product-api.html">
+<link rel="import" href="../paper-input/paper-input.html">
+<link rel="import" href="../paper-input/paper-textarea.html">
+<link rel="import" href="../paper-toggle-button/paper-toggle-button.html">
+
 <!--
 `oc-local-product-product-edit`
 Element to edit existing local product on the Ordercloud platform
 
-@demo demo/index.html 
+@demo demo/index.html
 -->
 
 <dom-module id="oc-local-product-product-edit">
@@ -12,22 +17,202 @@ Element to edit existing local product on the Ordercloud platform
     <style>
       :host {
         display: block;
+        margin-right: 20px;
+        padding-bottom: 10px;
+      }
+
+      .toggleItem {
+        max-width:200px;
+        margin: 10px 0px 0px 0px ;
+        @apply(--layout-horizontal);
+        @apply(--layout-justified);
+      }
+
+      paper-button {
+        margin: 10px 0;
+      }
+
+      div[prefix] {
+        margin-right: 10px;
       }
     </style>
-    <h2>Hello [[prop1]]</h2>
+
+    <oc-product-api id="prodApi"></oc-product-api>
+
+    <paper-input
+            id="prodName"
+            value="{{product.name}}"
+            label="Product Name"
+            always-float-label
+            required
+            auto-validate
+            error-message="Please provide a name"
+    ></paper-input>
+
+    <paper-input
+            value="{{product.sku}}"
+            always-float-label
+            label="SKU"
+    ></paper-input>
+
+    <paper-input
+            id="shortDescription"
+            value="{{product.shortDescription}}"
+            label="Short Description"
+            always-float-label
+            required
+            auto-validate
+            error-message="Please provide a short description"
+    ></paper-input>
+
+    <paper-textarea
+            id="description"
+            value="{{product.description}}"
+            label="Full Description"
+            always-float-label
+            required
+            auto-validate
+            error-message="Please provide a full description"
+    ></paper-textarea>
+
+    <paper-textarea
+            value="{{product.additionalInfo}}"
+            label="Additional Info"
+            always-float-label
+    ></paper-textarea>
+
+    <paper-input
+            id="price"
+            value="[[product.price]]"
+            label="Price"
+            always-float-label
+            required
+            auto-validate
+            error-message="Please provide a price"
+    >
+      <div prefix><strong>R </strong></div>
+    </paper-input>
+
+    <paper-input
+            value="[[product.discount]]"
+            label="Discount"
+            always-float-label
+    >
+      <div suffix><strong>%</strong></div>
+    </paper-input>
+
+    <div class="toggleItem">
+      <iron-label>Product is [[ _productEnabled(product.enabled) ]]</iron-label>
+      <paper-toggle-button checked="{{product.enabled}}"></paper-toggle-button>
+    </div>
+
+    <div class="toggleItem">
+      <iron-label>[[ _stockStatusChanged(stockAvailable) ]]</iron-label>
+      <paper-toggle-button checked="{{stockAvailable}}"></paper-toggle-button>
+    </div>
+
+    <paper-input
+            hidden$="[[!stockAvailable]]"
+            value="{{product.stockLevel}}"
+            label="Stock Level"
+            always-float-label
+            type="number"
+    ></paper-input>
+
+    <div class="toggleItem">
+      <iron-label>[[ _onlineAvailabilityChanged(product.availableOnline) ]] online</iron-label>
+      <paper-toggle-button checked="{{product.availableOnline}}"></paper-toggle-button>
+    </div>
+
+    <paper-button raised on-tap="_updateProduct">Update Product</paper-button>
+
   </template>
 
   <script>
     Polymer({
 
       is: 'oc-local-product-product-edit',
+      behaviors: [OC.Behaviours.ApiConsumer],
 
       properties: {
-        prop1: {
-          type: String,
-          value: 'oc-local-product-product-edit',
+        organisationId: Number,
+        loaded: Boolean,
+        productId : {
+          type: Number,
+          computed: "_computeProductId(product)"
         },
+        product: Object,
+        stockAvailable: Boolean
       },
+
+      observers: [
+        "refresh(product)",
+      ],
+
+      refresh : function(){
+
+        if (!this.product || this.loaded) {
+          return
+        }
+
+        this.stockAvailable = !!this.product.stockLevel;
+        this.loaded = true;
+
+      },
+
+      _computeProductId : function(product){
+        return product.id;
+      },
+
+      getProduct : function(){
+
+        this.$.optionApi.getOptionSets(1, -1)
+                .then(this._setPropertyResponseResults.bind(this, 'product'))
+                .catch(this.fire.bind(this, 'options_error', 'Could not load product'))
+                .finally(this.set.bind(this, 'loading', false));
+      },
+
+      _productEnabled: function(value) {
+        return   (value) ? 'enabled' : 'disabled';
+      },
+
+      _stockStatusChanged: function(value) {
+        return   (value) ? 'In Stock' : 'Stock N/A';
+      },
+
+      _onlineAvailabilityChanged: function(value) {
+        return   (value) ? 'Available' : 'Unavailable';
+      },
+
+      _updateProduct : function(e){
+
+        if(!this._validateAll()){
+          return
+        }
+
+//        clone product obj
+        var params = JSON.parse(JSON.stringify(this.product));
+
+        delete params.id;
+        delete params.organisation;
+
+        params.stockLevel = (this.stockAvailable) ? params.stockLevel : null;
+
+        this.$.prodApi.updateProduct(this.productId, params)
+                .then(this._setPropertyResponseResults.bind(this, 'product'))
+                .catch(this.fire.bind(this, 'options_error', 'Could not update product'))
+                .finally(this.set.bind(this, 'loading', false));
+      },
+
+      _validateAll : function(){
+        return (
+                this.$.prodName.validate() &&
+                this.$.shortDescription.validate() &&
+                this.$.description.validate() &&
+                this.$.price.validate()
+        )
+      }
+
 
     });
   </script>
